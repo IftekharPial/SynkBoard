@@ -1,0 +1,283 @@
+// SynkBoard Database Schema
+// Follows dynamic-entities.md, role-based-access.md, and api-contracts.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Role-based access control models
+// Note: Using String instead of enum for SQLite compatibility
+
+model Tenant {
+  id         String   @id @default(cuid())
+  name       String
+  slug       String   @unique
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  users           User[]
+  entities        Entity[]
+  entity_records  EntityRecord[]
+  dashboards      Dashboard[]
+  rules           Rule[]
+  api_keys        ApiKey[]
+  audit_logs      AuditLog[]
+  webhook_logs    WebhookLog[]
+  rule_logs       RuleLog[]
+
+  @@map("tenants")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  tenant_id     String
+  email         String   @unique
+  name          String
+  password_hash String?  // Optional for OAuth users
+  role          String
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  // Relations
+  tenant         Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  refresh_tokens RefreshToken[]
+  entity_records EntityRecord[]
+  dashboards     Dashboard[]
+  rules          Rule[]
+  audit_logs     AuditLog[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  user_id    String
+  token_hash String   @unique
+  expires_at DateTime
+  created_at DateTime @default(now())
+  is_revoked Boolean  @default(false)
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  tenant_id  String
+  name       String
+  key_hash   String   @unique
+  role       String   @default("integration")
+  is_active  Boolean  @default(true)
+  expires_at DateTime?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  tenant       Tenant       @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  webhook_logs WebhookLog[]
+
+  @@map("api_keys")
+}
+
+// Dynamic entity models following dynamic-entities.md
+// Note: Using String instead of enum for SQLite compatibility
+
+model Entity {
+  id        String   @id @default(cuid())
+  tenant_id String
+  name      String
+  slug      String
+  icon      String?
+  color     String?
+  is_active Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  // Relations
+  tenant         Tenant         @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  fields         EntityField[]
+  records        EntityRecord[]
+  widgets        Widget[]
+  rules          Rule[]
+
+  @@unique([tenant_id, slug])
+  @@map("entities")
+}
+
+model EntityField {
+  id            String    @id @default(cuid())
+  entity_id     String
+  name          String
+  key           String
+  type          String
+  options       String?   // For select/multiselect fields (JSON string)
+  is_required   Boolean   @default(false)
+  is_filterable Boolean   @default(true)
+  is_sortable   Boolean   @default(true)
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  // Relations
+  entity Entity @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+
+  @@unique([entity_id, key])
+  @@map("entity_fields")
+}
+
+model EntityRecord {
+  id         String   @id @default(cuid())
+  tenant_id  String
+  entity_id  String
+  fields     String   // JSON string storage for dynamic field values
+  created_at DateTime @default(now())
+  created_by String
+
+  // Relations
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [created_by], references: [id])
+
+  @@map("entity_records")
+}
+
+// Dashboard and widget models following dashboard-widgets.md
+// Note: Using String instead of enum for SQLite compatibility
+
+model Dashboard {
+  id         String   @id @default(cuid())
+  tenant_id  String
+  name       String
+  slug       String
+  is_public  Boolean  @default(false)
+  layout     String?  // Grid layout configuration (JSON string)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  created_by String
+
+  // Relations
+  tenant  Tenant   @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [created_by], references: [id])
+  widgets Widget[]
+
+  @@unique([tenant_id, slug])
+  @@map("dashboards")
+}
+
+model Widget {
+  id           String     @id @default(cuid())
+  dashboard_id String
+  entity_id    String
+  type         String
+  title        String
+  config       String     // Widget-specific settings (JSON string)
+  filters      String?    // Field filters (JSON string)
+  sort         String?    // Sort configuration (JSON string)
+  refresh_rate Int?       // Auto-refresh in seconds
+  is_public    Boolean    @default(false)
+  position     String?    // Grid position (JSON string)
+  created_at   DateTime   @default(now())
+  updated_at   DateTime   @updatedAt
+
+  // Relations
+  dashboard Dashboard @relation(fields: [dashboard_id], references: [id], onDelete: Cascade)
+  entity    Entity    @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+
+  @@map("widgets")
+}
+
+// Rule engine models following rule-engine.md
+// Note: Using String instead of enum for SQLite compatibility
+
+model Rule {
+  id         String    @id @default(cuid())
+  tenant_id  String
+  entity_id  String
+  name       String
+  is_active  Boolean   @default(true)
+  conditions String    // List of conditions (JSON string)
+  actions    String    // List of actions (JSON string)
+  run_on     String    @default("both")
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  created_by String
+
+  // Relations
+  tenant    Tenant    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  entity    Entity    @relation(fields: [entity_id], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [created_by], references: [id])
+  rule_logs RuleLog[]
+
+  @@map("rules")
+}
+
+// Note: Using String instead of enum for SQLite compatibility
+
+model RuleLog {
+  id          String        @id @default(cuid())
+  tenant_id   String
+  rule_id     String
+  record_id   String
+  status      String
+  duration_ms Int
+  output      String?       // Action responses (JSON string)
+  created_at  DateTime      @default(now())
+
+  // Relations
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  rule   Rule   @relation(fields: [rule_id], references: [id], onDelete: Cascade)
+
+  @@map("rule_logs")
+}
+
+// Audit and logging models following api-contracts.md and webhook-behavior.md
+// Note: Using String instead of enum for SQLite compatibility
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  tenant_id  String
+  user_id    String?
+  action     String
+  resource_type String
+  resource_id   String
+  changes    String?     // Before/after values (JSON string)
+  metadata   String?     // Additional context (JSON string)
+  created_at DateTime    @default(now())
+
+  // Relations
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [user_id], references: [id])
+
+  @@map("audit_logs")
+}
+
+// Note: Using String instead of enum for SQLite compatibility
+
+model WebhookLog {
+  id              String        @id @default(cuid())
+  tenant_id       String
+  api_key_id      String?
+  entity          String
+  source_ip       String?
+  status          String
+  duration_ms     Int
+  error_code      String?
+  schema_version  String?
+  deprecated_keys String?       // List of ignored deprecated fields (JSON string)
+  created_at      DateTime      @default(now())
+
+  // Relations
+  tenant  Tenant  @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  api_key ApiKey? @relation(fields: [api_key_id], references: [id])
+
+  @@map("webhook_logs")
+}
