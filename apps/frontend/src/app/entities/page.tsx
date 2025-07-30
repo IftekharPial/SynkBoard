@@ -10,6 +10,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEntities, useDeleteEntity } from '@/hooks/use-api';
 import { useAuth, usePermissions } from '@/contexts/auth-context';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/hooks/use-api';
 import {
   Button,
   Card,
@@ -33,6 +35,7 @@ import {
   TrashIcon,
   EyeIcon,
   ChartBarIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import { formatDate, formatNumber } from '@/lib/utils';
 import type { EntityWithFields } from '@synkboard/types';
@@ -43,6 +46,7 @@ export default function EntitiesPage() {
   const { hasPermission } = usePermissions();
   const { data, isLoading, error, refetch } = useEntities();
   const deleteEntity = useDeleteEntity();
+  const queryClient = useQueryClient();
 
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [entityToDelete, setEntityToDelete] = React.useState<EntityWithFields | null>(null);
@@ -51,6 +55,12 @@ export default function EntitiesPage() {
   const canEditEntity = hasPermission('entity:editSchema');
   const canDeleteEntity = hasPermission('entity:editSchema');
   const canViewRecords = hasPermission('entity:view');
+
+  const handleRefreshCache = async () => {
+    // Clear React Query cache and refetch
+    await queryClient.invalidateQueries({ queryKey: queryKeys.entities });
+    await refetch();
+  };
 
   const handleDeleteEntity = async () => {
     if (!entityToDelete) return;
@@ -196,6 +206,22 @@ export default function EntitiesPage() {
 
   const entities = data?.data?.entities || [];
 
+  // Debug logging
+  React.useEffect(() => {
+    if (entities.length > 0) {
+      console.log('🔍 Frontend Debug - Entities data:', entities);
+      const supportTickets = entities.find(e => e.slug === 'support-tickets');
+      if (supportTickets) {
+        console.log('🎯 Support Tickets entity:', {
+          name: supportTickets.name,
+          slug: supportTickets.slug,
+          _count: supportTickets._count,
+          recordCount: supportTickets._count?.records
+        });
+      }
+    }
+  }, [entities]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -208,14 +234,24 @@ export default function EntitiesPage() {
               Manage your data structures and field definitions
             </p>
           </div>
-          {canCreateEntity && (
+          <div className="flex items-center space-x-3">
             <Button
-              leftIcon={<PlusIcon className="h-4 w-4" />}
-              onClick={() => router.push('/entities/new')}
+              variant="outline"
+              leftIcon={<ArrowPathIcon className="h-4 w-4" />}
+              onClick={handleRefreshCache}
+              disabled={isLoading}
             >
-              Create Entity
+              Refresh
             </Button>
-          )}
+            {canCreateEntity && (
+              <Button
+                leftIcon={<PlusIcon className="h-4 w-4" />}
+                onClick={() => router.push('/entities/new')}
+              >
+                Create Entity
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 

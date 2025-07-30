@@ -93,7 +93,13 @@ function useApiMutation<TData, TVariables>(
 export function useEntities() {
   return useApiQuery(
     queryKeys.entities,
-    () => api.entities.list()
+    () => api.entities.list(),
+    {
+      staleTime: 0, // Always consider data stale
+      cacheTime: 0, // Don't cache the data
+      refetchOnMount: true, // Always refetch when component mounts
+      refetchOnWindowFocus: true, // Refetch when window gains focus
+    }
   );
 }
 
