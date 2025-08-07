@@ -317,14 +317,14 @@ async function executeAggregateQuery(
     throw new Error(`Unsupported aggregate function: ${metricType}`);
   }
 
-  // Build SQL query for JSONB field aggregation
+  // Build SQL query for JSON field aggregation (SQLite)
   const result = await prisma.$queryRaw`
-    SELECT ${aggregateFunc}(CAST(fields->>${targetField} AS NUMERIC)) as value
+    SELECT ${aggregateFunc}(CAST(json_extract(fields, ${`$.${targetField}`}) AS NUMERIC)) as value
     FROM entity_records
     WHERE tenant_id = ${where.tenant_id}
       AND entity_id = ${where.entity_id}
-      AND fields->>${targetField} IS NOT NULL
-      AND fields->>${targetField} != 'null'
+      AND json_extract(fields, ${`$.${targetField}`}) IS NOT NULL
+      AND json_extract(fields, ${`$.${targetField}`}) != 'null'
   `;
 
   return Number(result[0]?.value || 0);
@@ -346,16 +346,16 @@ async function executeGroupedQuery(
 
   if (metricType === 'count') {
     query = `
-      SELECT 
-        fields->>${groupBy} as label,
+      SELECT
+        json_extract(fields, '$.${groupBy}') as label,
         COUNT(*) as value
       FROM entity_records
-      WHERE tenant_id = $1
-        AND entity_id = $2
-        AND fields->>${groupBy} IS NOT NULL
-      GROUP BY fields->>${groupBy}
+      WHERE tenant_id = ?
+        AND entity_id = ?
+        AND json_extract(fields, '$.${groupBy}') IS NOT NULL
+      GROUP BY json_extract(fields, '$.${groupBy}')
       ORDER BY value ${sortOrder.toUpperCase()}
-      LIMIT $3
+      LIMIT ?
     `;
   } else {
     if (!targetField) {
@@ -371,18 +371,18 @@ async function executeGroupedQuery(
 
     const aggregateFunc = aggregateMap[metricType];
     query = `
-      SELECT 
-        fields->>${groupBy} as label,
-        ${aggregateFunc}(CAST(fields->>${targetField} AS NUMERIC)) as value
+      SELECT
+        json_extract(fields, '$.${groupBy}') as label,
+        ${aggregateFunc}(CAST(json_extract(fields, '$.${targetField}') AS NUMERIC)) as value
       FROM entity_records
-      WHERE tenant_id = $1
-        AND entity_id = $2
-        AND fields->>${groupBy} IS NOT NULL
-        AND fields->>${targetField} IS NOT NULL
-        AND fields->>${targetField} != 'null'
-      GROUP BY fields->>${groupBy}
+      WHERE tenant_id = ?
+        AND entity_id = ?
+        AND json_extract(fields, '$.${groupBy}') IS NOT NULL
+        AND json_extract(fields, '$.${targetField}') IS NOT NULL
+        AND json_extract(fields, '$.${targetField}') != 'null'
+      GROUP BY json_extract(fields, '$.${groupBy}')
       ORDER BY value ${sortOrder.toUpperCase()}
-      LIMIT $3
+      LIMIT ?
     `;
   }
 

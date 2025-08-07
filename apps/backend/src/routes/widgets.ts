@@ -8,11 +8,12 @@ import { authMiddleware, requirePermission } from '../middleware/auth';
 import { validateBody, validateParams, validateQuery } from '../middleware/validation';
 import { asyncHandler } from '../middleware/error-handler';
 import { executeWidgetQuery } from '../services/query-engine';
-import { 
+import {
   CreateWidgetSchema,
   UpdateWidgetSchema,
   WidgetQueryParamsSchema,
   UuidSchema,
+  CuidSchema,
   validateWidgetConfig,
   createSuccessResponse,
   NotFoundError,
@@ -185,7 +186,7 @@ router.post('/',
  */
 router.get('/:id',
   requirePermission('dashboard:view'),
-  validateParams(z.object({ id: UuidSchema })),
+  validateParams(z.object({ id: CuidSchema })),
   asyncHandler(async (req, res) => {
     const tenantId = req.context!.tenantId;
     const { id } = req.params;
@@ -224,7 +225,7 @@ router.get('/:id',
  */
 router.put('/:id',
   requirePermission('dashboard:edit'),
-  validateParams(z.object({ id: UuidSchema })),
+  validateParams(z.object({ id: CuidSchema })),
   validateBody(UpdateWidgetSchema),
   asyncHandler(async (req, res) => {
     const tenantId = req.context!.tenantId;
@@ -299,7 +300,7 @@ router.put('/:id',
  */
 router.delete('/:id',
   requirePermission('dashboard:edit'),
-  validateParams(z.object({ id: UuidSchema })),
+  validateParams(z.object({ id: CuidSchema })),
   asyncHandler(async (req, res) => {
     const tenantId = req.context!.tenantId;
     const userId = req.context!.userId;
@@ -354,7 +355,7 @@ router.delete('/:id',
  */
 router.get('/:id/data',
   requirePermission('dashboard:view'),
-  validateParams(z.object({ id: UuidSchema })),
+  validateParams(z.object({ id: CuidSchema })),
   validateQuery(WidgetQueryParamsSchema),
   asyncHandler(async (req, res) => {
     const tenantId = req.context!.tenantId;
@@ -388,11 +389,20 @@ router.get('/:id/data',
     };
 
     const timer = Date.now();
+
+    // Parse widget config from JSON string
+    let parsedConfig;
+    try {
+      parsedConfig = JSON.parse(widget.config);
+    } catch (error) {
+      throw new ValidationError(`Invalid widget config JSON: ${error.message}`);
+    }
+
     const data = await executeWidgetQuery({
       tenantId,
       entityId: widget.entity_id,
       widgetType: widget.type,
-      config: widget.config,
+      config: parsedConfig,
       filters: combinedFilters,
       startDate: start_date,
       endDate: end_date,

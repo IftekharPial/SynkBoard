@@ -81,6 +81,9 @@ export const EmailSchema = z.string().email();
 
 export const UuidSchema = z.string().uuid();
 
+// CUID schema for Prisma-generated IDs
+export const CuidSchema = z.string().regex(/^c[a-z0-9]{24}$/, 'Must be a valid CUID');
+
 // Sort and filter schemas
 export const SortOrderSchema = z.enum(['asc', 'desc']);
 
