@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Multi-tenant, schema-less analytics platform",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
 
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
